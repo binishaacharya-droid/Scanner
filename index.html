@@ -1,0 +1,1215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Product Barcode Scanner</title>
+
+<!-- Tabler icons -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
+
+<style>
+/* =====================================================
+   PRODUCT BARCODE SCANNER - FRONTEND
+   Features:
+   - Camera scan for QR, UPC, EAN barcodes
+   - Upload barcode/QR image
+   - Barcode correction popup before lookup
+   - Quantity popup with keyboard input and +/- buttons
+   - Optional remarks
+   - Bill/list with S.N., product, barcode, quantity, remarks
+   - Export CSV and real print button
+   - No price, no cart, no source shown
+===================================================== */
+
+/* ---------------- BASIC RESET ---------------- */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+/* ---------------- THEME COLORS ---------------- */
+:root {
+  --bg: #ffffff;
+  --bg-soft: #f5f5f4;
+  --bg-page: #e8e7e3;
+  --text: #1a1a1a;
+  --text-muted: #6b6b6b;
+  --border: rgba(0, 0, 0, .12);
+  --border-strong: rgba(0, 0, 0, .22);
+  --success-bg: #eaf3de;
+  --success-text: #3b6d11;
+  --danger-bg: #fcebeb;
+  --danger-text: #a32d2d;
+  --info-bg: #e6f1fb;
+  --info-text: #185fa5;
+  --radius-md: 8px;
+  --radius-lg: 14px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1c1c1c;
+    --bg-soft: #252525;
+    --bg-page: #2e2e2e;
+    --text: #f0f0f0;
+    --text-muted: #a0a0a0;
+    --border: rgba(255, 255, 255, .12);
+    --border-strong: rgba(255, 255, 255, .22);
+    --success-bg: #173404;
+    --success-text: #c0dd97;
+    --danger-bg: #501313;
+    --danger-text: #f09595;
+    --info-bg: #042c53;
+    --info-text: #85b7eb;
+  }
+}
+
+/* ---------------- PAGE LAYOUT ---------------- */
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: var(--bg-page);
+  color: var(--text);
+  min-height: 100vh;
+  padding: 1rem;
+}
+
+#app {
+  max-width: 760px;
+  margin: 0 auto;
+}
+
+h1 {
+  font-size: 22px;
+  font-weight: 700;
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ---------------- TABS ---------------- */
+.tab-bar {
+  display: flex;
+  gap: 4px;
+  background: var(--bg-soft);
+  padding: 4px;
+  border-radius: var(--radius-lg);
+  margin-bottom: 1rem;
+}
+
+.tab {
+  flex: 1;
+  padding: 10px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.tab.active {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.panel { display: none; }
+.panel.active { display: block; }
+
+/* ---------------- STATUS ---------------- */
+.status {
+  background: var(--bg-soft);
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+  min-height: 39px;
+  display: flex;
+  align-items: center;
+}
+
+.status.danger {
+  color: var(--danger-text);
+  background: var(--danger-bg);
+}
+
+/* ---------------- SCANNER BOX ---------------- */
+.scanner-box {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  background: #000;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+
+video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+#qr-canvas { display: none; }
+
+#scan-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.corners {
+  position: relative;
+  width: 210px;
+  height: 160px;
+}
+
+.corner {
+  position: absolute;
+  width: 42px;
+  height: 42px;
+  border-color: #ffffff;
+}
+
+.tl { top: 0; left: 0; border-top: 3px solid; border-left: 3px solid; }
+.tr { top: 0; right: 0; border-top: 3px solid; border-right: 3px solid; }
+.bl { bottom: 0; left: 0; border-bottom: 3px solid; border-left: 3px solid; }
+.br { bottom: 0; right: 0; border-bottom: 3px solid; border-right: 3px solid; }
+
+#scanline {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  top: 0;
+  height: 2px;
+  background: #63c9ff;
+  box-shadow: 0 0 8px rgba(99,201,255,.9);
+}
+
+#flash {
+  position: absolute;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(29,158,117,.25);
+}
+
+/* ---------------- BUTTONS ---------------- */
+.btn-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+button {
+  font-family: inherit;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 14px;
+}
+
+button:hover { background: var(--bg-soft); }
+button:disabled { opacity: .45; cursor: not-allowed; }
+
+.primary-btn { background: var(--info-bg); color: var(--info-text); border: none; }
+.save-btn { background: var(--success-bg); color: var(--success-text); border: none; }
+.danger-btn { background: var(--danger-bg); color: var(--danger-text); border: none; }
+
+/* ---------------- PRODUCT CARD ---------------- */
+.item-card {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 15px;
+  margin-bottom: 10px;
+}
+
+.item-top {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.item-icon {
+  width: 52px;
+  height: 52px;
+  background: var(--bg-soft);
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.item-icon img {
+  width: 52px;
+  height: 52px;
+  object-fit: cover;
+}
+
+.item-name {
+  font-size: 16px;
+  font-weight: 700;
+  word-break: break-word;
+}
+
+.item-meta {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.5;
+  margin-top: 3px;
+}
+
+/* ---------------- FORMS ---------------- */
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+
+label {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.text-input,
+.qty-input,
+textarea {
+  width: 100%;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  font: inherit;
+}
+
+textarea {
+  resize: vertical;
+  min-height: 70px;
+}
+
+.qty-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.qty-label {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.qty-box {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.qty-btn {
+  width: 42px;
+  height: 40px;
+  border: none;
+  background: var(--bg-soft);
+  font-size: 18px;
+  border-radius: 0;
+}
+
+.qty-box .qty-input {
+  width: 82px;
+  height: 40px;
+  padding: 0;
+  border: none;
+  text-align: center;
+  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  border-radius: 0;
+}
+
+/* ---------------- MODAL ---------------- */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, .45);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  z-index: 50;
+}
+
+.modal-backdrop.active { display: flex; }
+
+.modal {
+  width: min(100%, 460px);
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, .22);
+}
+
+.modal-title {
+  font-size: 17px;
+  font-weight: 700;
+  margin-bottom: 10px;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.modal-actions button { flex: 1; }
+
+/* ---------------- BILL TABLE ---------------- */
+.section-title {
+  font-size: 13px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  margin-bottom: 8px;
+}
+
+.bill-table-wrap {
+  overflow-x: auto;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+}
+
+.bill-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--bg);
+  min-width: 640px;
+}
+
+.bill-table th,
+.bill-table td {
+  padding: 10px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.bill-table th {
+  background: var(--bg-soft);
+  font-weight: 700;
+}
+
+.bill-table td:first-child,
+.bill-table td:nth-child(4) {
+  text-align: center;
+}
+
+.empty {
+  text-align: center;
+  padding: 2rem;
+  color: var(--text-muted);
+  background: var(--bg);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+}
+
+/* ---------------- RESPONSIVE ---------------- */
+@media (max-width: 520px) {
+  body { padding: .75rem; }
+  .btn-row { flex-direction: column; }
+  .modal-actions { flex-direction: column; }
+  .corners { width: 170px; height: 130px; }
+}
+
+/* ---------------- PRINT ---------------- */
+@media print {
+  body { background: #fff; color: #000; padding: 0; }
+  h1, .tab-bar, #panel-scanner, .btn-row, .modal-backdrop { display: none !important; }
+  #app { max-width: none; margin: 0; }
+  .panel { display: none !important; }
+  #panel-items { display: block !important; }
+  .section-title { color: #000; font-size: 16px; margin-bottom: 12px; }
+  .bill-table-wrap { border: 1px solid #000; border-radius: 0; overflow: visible; }
+  .bill-table { min-width: 0; color: #000; }
+  .bill-table th, .bill-table td { border: 1px solid #000; color: #000; }
+}
+</style>
+</head>
+
+<body>
+<div id="app">
+
+  <h1><i class="ti ti-barcode"></i> Product Barcode Scanner</h1>
+
+  <!-- Tabs -->
+  <div class="tab-bar">
+    <button class="tab active" id="tab-scanner" onclick="switchTab('scanner')">
+      <i class="ti ti-scan"></i> Scanner
+    </button>
+
+    <button class="tab" id="tab-items" onclick="switchTab('items')">
+      <i class="ti ti-receipt"></i> Items <span id="item-count"></span>
+    </button>
+  </div>
+
+  <!-- Scanner panel -->
+  <div class="panel active" id="panel-scanner">
+    <div class="status" id="status-text">Starting camera...</div>
+
+    <div class="scanner-box">
+      <video id="qr-video" playsinline muted></video>
+      <canvas id="qr-canvas"></canvas>
+
+      <div id="scan-overlay">
+        <div class="corners">
+          <div class="corner tl"></div>
+          <div class="corner tr"></div>
+          <div class="corner bl"></div>
+          <div class="corner br"></div>
+          <div id="scanline"></div>
+        </div>
+      </div>
+
+      <div id="flash">
+        <i class="ti ti-circle-check" style="font-size:64px;color:white"></i>
+      </div>
+    </div>
+
+    <!-- Scanner controls -->
+    <div class="btn-row">
+      <button onclick="stopScanner()" id="btn-stop" style="flex:1">
+        <i class="ti ti-player-stop"></i> Stop
+      </button>
+
+      <button onclick="restartScanner()" id="btn-restart" disabled style="flex:1">
+        <i class="ti ti-refresh"></i> Scan Again
+      </button>
+
+      <button onclick="openUploadPicker()" class="primary-btn" style="flex:1">
+        <i class="ti ti-upload"></i> Upload
+      </button>
+    </div>
+
+    <div class="btn-row">
+      <button onclick="openManualModal()" class="save-btn" style="flex:1">
+        <i class="ti ti-plus"></i> Add Product
+      </button>
+      <button onclick="showItemsAndPrint()" style="flex:1">
+        <i class="ti ti-printer"></i> Print Bill
+      </button>
+    </div>
+
+    <!-- Hidden image uploader -->
+    <input
+      type="file"
+      id="file-input"
+      accept="image/*"
+      style="display:none"
+      onchange="handleUpload(event)"
+    >
+  </div>
+
+  <!-- Items / Bill panel -->
+  <div class="panel" id="panel-items">
+    <div id="items-list"></div>
+  </div>
+
+</div>
+
+<!-- Scan/quantity popup -->
+<div class="modal-backdrop" id="scan-modal">
+  <div class="modal">
+    <div class="modal-title">Check Product Details</div>
+
+    <div class="form-grid">
+      <div id="manual-name-wrap" style="display:none">
+        <label>Product name</label>
+        <input class="text-input" id="modal-product-name" placeholder="Product name">
+      </div>
+
+      <div id="barcode-wrap">
+        <label>Edit barcode / QR code</label>
+        <input class="text-input" id="modal-barcode" inputmode="numeric" placeholder="Barcode number">
+      </div>
+
+      <div>
+        <label>Quantity</label>
+        <div class="qty-box">
+          <button class="qty-btn" onclick="changeModalQty(-1)">−</button>
+          <input class="qty-input" id="modal-qty" type="number" min="1" value="1">
+          <button class="qty-btn" onclick="changeModalQty(1)">+</button>
+        </div>
+      </div>
+
+      <div>
+        <label>Remarks <span style="color:var(--text-muted)">(optional)</span></label>
+        <textarea id="modal-remarks" placeholder="Write remarks if needed"></textarea>
+      </div>
+    </div>
+
+    <div class="modal-actions">
+      <button onclick="closeScanModal()">Cancel</button>
+      <button class="save-btn" onclick="confirmScanModal()">
+        <i class="ti ti-check"></i> OK
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Add/print popup after lookup -->
+<div class="modal-backdrop" id="action-modal">
+  <div class="modal">
+    <div class="modal-title">Product Ready</div>
+    <div id="action-product-info" class="item-meta" style="font-size:14px;margin-bottom:12px"></div>
+
+    <div class="modal-actions">
+      <button onclick="closeActionModal()">Cancel</button>
+      <button class="save-btn" onclick="addPendingItem(false)">
+        <i class="ti ti-plus"></i> Add
+      </button>
+      <button class="primary-btn" onclick="addPendingItem(true)">
+        <i class="ti ti-printer"></i> Print
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- QR scanner library -->
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+
+<!-- Barcode scanner fallback library -->
+<script src="https://cdn.jsdelivr.net/npm/quagga@0.12.1/dist/quagga.min.js"></script>
+
+<script>
+/* =====================================================
+   APP STATE
+===================================================== */
+let scannedItems = [];
+let stream = null;
+let scanning = false;
+let rafId = null;
+let lastResult = null;
+let barcodeDetector = null;
+let detectorBusy = false;
+let quaggaBusy = false;
+let linePos = 0;
+let lineDir = 1;
+let modalMode = "scan";
+let pendingItem = null;
+
+const video = document.getElementById("qr-video");
+const canvas = document.getElementById("qr-canvas");
+const ctx = canvas.getContext("2d", { willReadFrequently: true });
+
+/* =====================================================
+   SMALL HELPERS
+===================================================== */
+function setStatus(message, danger = false) {
+  const status = document.getElementById("status-text");
+  status.textContent = message;
+  status.classList.toggle("danger", danger);
+}
+
+function onlyDigits(value) {
+  return String(value || "").replace(/\D/g, "");
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function cleanBrand(brand) {
+  const value = String(brand || "").trim();
+  if (!value || value.toLowerCase() === "unknown") return "";
+  return value;
+}
+
+function flashSuccess() {
+  const flash = document.getElementById("flash");
+  flash.style.display = "flex";
+  setTimeout(() => flash.style.display = "none", 600);
+}
+
+/* =====================================================
+   BARCODE VALIDATION
+   This rejects many bad Quagga misreads.
+===================================================== */
+function isValidEAN13(code) {
+  if (!/^\d{13}$/.test(code)) return false;
+  const digits = code.split("").map(Number);
+  const check = digits.pop();
+  const sum = digits.reduce((total, digit, index) => total + digit * (index % 2 === 0 ? 1 : 3), 0);
+  return (10 - (sum % 10)) % 10 === check;
+}
+
+function isValidUPCA(code) {
+  if (!/^\d{12}$/.test(code)) return false;
+  const digits = code.split("").map(Number);
+  const check = digits.pop();
+  const sum = digits.reduce((total, digit, index) => total + digit * (index % 2 === 0 ? 3 : 1), 0);
+  return (10 - (sum % 10)) % 10 === check;
+}
+
+function isValidEAN8(code) {
+  if (!/^\d{8}$/.test(code)) return false;
+  const digits = code.split("").map(Number);
+  const check = digits.pop();
+  const sum = digits.reduce((total, digit, index) => total + digit * (index % 2 === 0 ? 3 : 1), 0);
+  return (10 - (sum % 10)) % 10 === check;
+}
+
+function isValidProductBarcode(code) {
+  return isValidUPCA(code) || isValidEAN13(code) || isValidEAN8(code);
+}
+
+/* =====================================================
+   PRODUCT LOOKUP
+   Calls your backend: server.js
+===================================================== */
+async function lookupProductOnline(barcode) {
+  try {
+    const res = await fetch(`http://localhost:3000/lookup/${encodeURIComponent(barcode)}`);
+    const data = await res.json();
+
+    return {
+      name: data.name || barcode,
+      brand: cleanBrand(data.brand),
+      category: data.category || "",
+      image: data.image || "",
+      barcode: barcode
+    };
+  } catch (error) {
+    console.error(error);
+
+    return {
+      name: barcode,
+      brand: "",
+      category: "",
+      image: "",
+      barcode: barcode
+    };
+  }
+}
+
+/* =====================================================
+   CAMERA SCANNER
+===================================================== */
+async function startScanner() {
+  try {
+    stopStreamOnly();
+
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: "environment",
+        width: { ideal: 1280 },
+        height: { ideal: 720 }
+      },
+      audio: false
+    });
+
+    video.srcObject = stream;
+    await video.play();
+
+    if ("BarcodeDetector" in window) {
+      barcodeDetector = new BarcodeDetector({
+        formats: ["ean_13", "ean_8", "upc_a", "upc_e"]
+      });
+    }
+
+    scanning = true;
+    setStatus("Point camera straight at a barcode or QR code");
+
+    document.getElementById("btn-stop").disabled = false;
+    document.getElementById("btn-restart").disabled = true;
+
+    tick();
+  } catch (error) {
+    console.error(error);
+    setStatus("Camera blocked. Use Upload or allow camera permission.", true);
+    document.getElementById("btn-stop").disabled = true;
+    document.getElementById("btn-restart").disabled = false;
+  }
+}
+
+function stopStreamOnly() {
+  if (stream) {
+    stream.getTracks().forEach(track => track.stop());
+    stream = null;
+  }
+}
+
+function tick() {
+  if (!scanning) return;
+
+  if (video.readyState === video.HAVE_ENOUGH_DATA) {
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    scanCanvasForCode(false);
+    moveScanLine();
+  }
+
+  rafId = requestAnimationFrame(tick);
+}
+
+async function scanCanvasForCode(isUpload) {
+  if (!scanning && !isUpload) return;
+
+  /* 1. QR scan using jsQR */
+  try {
+    const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const qr = jsQR(image.data, image.width, image.height, {
+      inversionAttempts: "attemptBoth"
+    });
+
+    if (qr && qr.data && qr.data !== lastResult) {
+      lastResult = qr.data;
+      onDetected(qr.data, "QR");
+      return;
+    }
+  } catch (error) {
+    console.warn("QR scan failed", error);
+  }
+
+  /* 2. Native BarcodeDetector first. Better than Quagga when supported. */
+  if (barcodeDetector && !detectorBusy) {
+    detectorBusy = true;
+    try {
+      const barcodes = await barcodeDetector.detect(canvas);
+      if (barcodes.length > 0) {
+        const code = onlyDigits(barcodes[0].rawValue);
+        if (code && code !== lastResult && isValidProductBarcode(code)) {
+          lastResult = code;
+          onDetected(code, "BarcodeDetector");
+          return;
+        }
+      }
+    } catch (error) {
+      console.warn("BarcodeDetector failed", error);
+    } finally {
+      detectorBusy = false;
+    }
+  }
+
+  /* 3. Quagga fallback. It can misread, so checksum validation is required. */
+  if (window.Quagga && !quaggaBusy) {
+    quaggaBusy = true;
+
+    Quagga.decodeSingle({
+      src: canvas.toDataURL("image/png"),
+      numOfWorkers: 0,
+      locate: true,
+      inputStream: {
+        size: 1200,
+        singleChannel: false
+      },
+      decoder: {
+        readers: ["upc_reader", "ean_reader", "ean_8_reader"],
+        multiple: false
+      }
+    }, function(result) {
+      quaggaBusy = false;
+
+      if (!result || !result.codeResult || !result.codeResult.code) return;
+
+      const code = onlyDigits(result.codeResult.code);
+      if (code && code !== lastResult && isValidProductBarcode(code)) {
+        lastResult = code;
+        onDetected(code, "Quagga");
+      }
+    });
+  }
+}
+
+function moveScanLine() {
+  linePos += 2 * lineDir;
+  if (linePos >= 150) lineDir = -1;
+  if (linePos <= 0) lineDir = 1;
+  document.getElementById("scanline").style.top = linePos + "px";
+}
+
+/* =====================================================
+   UPLOAD IMAGE SCANNER
+===================================================== */
+function openUploadPicker() {
+  document.getElementById("file-input").click();
+}
+
+function handleUpload(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+
+  reader.onload = function(e) {
+    const img = new Image();
+
+    img.onload = async function() {
+      stopScanner();
+
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      ctx.drawImage(img, 0, 0);
+
+      setStatus("Scanning uploaded image...");
+
+      if ("BarcodeDetector" in window && !barcodeDetector) {
+        barcodeDetector = new BarcodeDetector({
+          formats: ["ean_13", "ean_8", "upc_a", "upc_e"]
+        });
+      }
+
+      lastResult = null;
+      await scanCanvasForCode(true);
+
+      setTimeout(() => {
+        if (!lastResult) {
+          setStatus("No barcode found. Try a clearer, straight photo.", true);
+        }
+      }, 400);
+    };
+
+    img.src = e.target.result;
+  };
+
+  reader.readAsDataURL(file);
+  event.target.value = "";
+}
+
+/* =====================================================
+   MODAL FLOW
+===================================================== */
+function onDetected(rawCode, method = "Scanner") {
+  scanning = false;
+  cancelAnimationFrame(rafId);
+  stopStreamOnly();
+
+  let code = onlyDigits(rawCode) || String(rawCode).trim();
+  flashSuccess();
+  setStatus(`Detected from ${method}. Check details.`);
+  openScanModal(code);
+}
+
+function openScanModal(code = "") {
+  modalMode = "scan";
+  document.getElementById("manual-name-wrap").style.display = "none";
+  document.getElementById("barcode-wrap").style.display = "block";
+  document.getElementById("modal-product-name").value = "";
+  document.getElementById("modal-barcode").value = code;
+  document.getElementById("modal-qty").value = "1";
+  document.getElementById("modal-remarks").value = "";
+  document.getElementById("scan-modal").classList.add("active");
+  setTimeout(() => document.getElementById("modal-barcode").focus(), 50);
+}
+
+function openManualModal() {
+  stopScanner();
+  modalMode = "manual";
+  document.getElementById("manual-name-wrap").style.display = "block";
+  document.getElementById("barcode-wrap").style.display = "none";
+  document.getElementById("modal-product-name").value = "";
+  document.getElementById("modal-barcode").value = "Manual";
+  document.getElementById("modal-qty").value = "1";
+  document.getElementById("modal-remarks").value = "";
+  document.getElementById("scan-modal").classList.add("active");
+  setTimeout(() => document.getElementById("modal-product-name").focus(), 50);
+}
+
+function closeScanModal() {
+  document.getElementById("scan-modal").classList.remove("active");
+  setStatus("Ready for next scan");
+  restartScanner();
+}
+
+function changeModalQty(amount) {
+  const input = document.getElementById("modal-qty");
+  let value = parseInt(input.value, 10) || 1;
+  value += amount;
+  if (value < 1) value = 1;
+  input.value = value;
+}
+
+async function confirmScanModal() {
+  const qty = Math.max(1, parseInt(document.getElementById("modal-qty").value, 10) || 1);
+  const remarks = document.getElementById("modal-remarks").value.trim();
+
+  if (modalMode === "manual") {
+    const name = document.getElementById("modal-product-name").value.trim();
+    if (!name) {
+      alert("Enter product name first.");
+      return;
+    }
+
+    pendingItem = {
+      name,
+      brand: "",
+      barcode: "Manual",
+      quantity: qty,
+      remarks
+    };
+  } else {
+    const code = (onlyDigits(document.getElementById("modal-barcode").value) || document.getElementById("modal-barcode").value.trim());
+    if (!code) {
+      alert("Enter barcode / QR code first.");
+      return;
+    }
+
+    document.getElementById("scan-modal").classList.remove("active");
+    setStatus("Looking up product...");
+
+    const product = await lookupProductOnline(code);
+    pendingItem = {
+      ...product,
+      quantity: qty,
+      remarks
+    };
+  }
+
+  document.getElementById("scan-modal").classList.remove("active");
+  openActionModal();
+}
+
+function openActionModal() {
+  if (!pendingItem) return;
+
+  const brandLine = pendingItem.brand ? `<br>Brand: ${escapeHtml(pendingItem.brand)}` : "";
+  const remarksLine = pendingItem.remarks ? `<br>Remarks: ${escapeHtml(pendingItem.remarks)}` : "";
+
+  document.getElementById("action-product-info").innerHTML = `
+    <strong>${escapeHtml(pendingItem.name)}</strong>${brandLine}<br>
+    Barcode: ${escapeHtml(pendingItem.barcode)}<br>
+    Quantity: ${escapeHtml(pendingItem.quantity)}${remarksLine}
+  `;
+
+  document.getElementById("action-modal").classList.add("active");
+}
+
+function closeActionModal() {
+  document.getElementById("action-modal").classList.remove("active");
+  pendingItem = null;
+  setStatus("Ready for next scan");
+  restartScanner();
+}
+
+function addPendingItem(printAfterAdd = false) {
+  if (!pendingItem) return;
+
+  scannedItems.push(pendingItem);
+  pendingItem = null;
+
+  document.getElementById("action-modal").classList.remove("active");
+  updateItemCount();
+  renderItemsList();
+
+  if (printAfterAdd) {
+    showItemsAndPrint();
+  } else {
+    setStatus("Item added. Ready for next scan.");
+    restartScanner();
+  }
+}
+
+/* =====================================================
+   ITEMS / BILL
+===================================================== */
+function renderItemsList() {
+  const list = document.getElementById("items-list");
+
+  if (scannedItems.length === 0) {
+    list.innerHTML = `
+      <div class="empty">No items saved yet</div>
+      <div class="btn-row">
+        <button onclick="openManualModal()" class="save-btn" style="flex:1">
+          <i class="ti ti-plus"></i> Add Product
+        </button>
+        <button onclick="switchTab('scanner')" class="primary-btn" style="flex:1">
+          <i class="ti ti-scan"></i> Scan Product
+        </button>
+      </div>
+    `;
+    return;
+  }
+
+  list.innerHTML = `
+    <div class="section-title">Scanned Items Bill</div>
+
+    <div class="bill-table-wrap">
+      <table class="bill-table">
+        <thead>
+          <tr>
+            <th>S.N.</th>
+            <th>Product</th>
+            <th>Barcode</th>
+            <th>Qty</th>
+            <th>Remarks</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${scannedItems.map((item, index) => {
+            const brand = cleanBrand(item.brand);
+            return `
+              <tr>
+                <td>${index + 1}</td>
+                <td>
+                  <strong>${escapeHtml(item.name)}</strong>
+                  ${brand ? `<br><small>${escapeHtml(brand)}</small>` : ""}
+                </td>
+                <td>${escapeHtml(item.barcode)}</td>
+                <td>${escapeHtml(item.quantity)}</td>
+                <td>${escapeHtml(item.remarks || "")}</td>
+              </tr>
+            `;
+          }).join("")}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="btn-row">
+  <button onclick="exportBillSVG()" class="primary-btn" style="flex:1">
+    <i class="ti ti-download"></i> Export SVG
+  </button>
+
+  <button onclick="openManualModal()" class="save-btn" style="flex:1">
+    <i class="ti ti-plus"></i> Add
+  </button>
+
+  <button onclick="clearItems()" class="danger-btn" style="flex:1">
+    <i class="ti ti-trash"></i> Clear List
+  </button>
+
+  <button onclick="printBill()" style="flex:1">
+    <i class="ti ti-printer"></i> Print
+  </button>
+</div>
+  `;
+}
+
+function updateItemCount() {
+  const count = document.getElementById("item-count");
+  count.textContent = scannedItems.length ? `(${scannedItems.length})` : "";
+}
+
+function clearItems() {
+  if (!confirm("Clear all saved items?")) return;
+  scannedItems = [];
+  updateItemCount();
+  renderItemsList();
+}
+
+function exportBillSVG() {
+  if (!scannedItems.length) {
+    alert("No items to export.");
+    return;
+  }
+
+  const rowHeight = 46;
+  const width = 900;
+  const height = 120 + scannedItems.length * rowHeight;
+
+  const rows = scannedItems.map((item, index) => `
+    <text x="40" y="${110 + index * rowHeight}">${index + 1}</text>
+    <text x="110" y="${110 + index * rowHeight}">${escapeHtml(item.name)}</text>
+    <text x="430" y="${110 + index * rowHeight}">${escapeHtml(item.barcode)}</text>
+    <text x="650" y="${110 + index * rowHeight}">${escapeHtml(item.quantity)}</text>
+    <text x="730" y="${110 + index * rowHeight}">${escapeHtml(item.remarks || "")}</text>
+  `).join("");
+
+  const svg = `
+<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
+  <rect width="100%" height="100%" fill="white"/>
+  <text x="40" y="40" font-size="24" font-weight="700">PRODUCTS LIST</text>
+
+  <text x="40" y="75" font-size="15" font-weight="700">S.N.</text>
+  <text x="110" y="75" font-size="15" font-weight="700">Product</text>
+  <text x="430" y="75" font-size="15" font-weight="700">Barcode</text>
+  <text x="650" y="75" font-size="15" font-weight="700">Qty</text>
+  <text x="730" y="75" font-size="15" font-weight="700">Remarks</text>
+
+  ${rows}
+</svg>`;
+
+  const blob = new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = "scanned-items-bill.svg";
+  link.click();
+  URL.revokeObjectURL(link.href);
+}
+function printBill() {
+  if (!scannedItems.length) {
+    alert("No items to print.");
+    return;
+  }
+  switchTab("items");
+  setTimeout(() => window.print(), 100);
+}
+
+/* =====================================================
+   TABS + CONTROLS
+===================================================== */
+function switchTab(name) {
+  document.querySelectorAll(".tab").forEach(tab => tab.classList.remove("active"));
+  document.querySelectorAll(".panel").forEach(panel => panel.classList.remove("active"));
+
+  document.getElementById("tab-" + name).classList.add("active");
+  document.getElementById("panel-" + name).classList.add("active");
+
+  if (name === "items") renderItemsList();
+}
+
+function stopScanner() {
+  scanning = false;
+  cancelAnimationFrame(rafId);
+  stopStreamOnly();
+  setStatus("Scanner stopped");
+  document.getElementById("btn-stop").disabled = true;
+  document.getElementById("btn-restart").disabled = false;
+}
+
+function restartScanner() {
+  lastResult = null;
+  detectorBusy = false;
+  quaggaBusy = false;
+  startScanner();
+}
+
+/* ---------------- START APP ---------------- */
+updateItemCount();
+renderItemsList();
+startScanner();
+</script>
+</body>
+</html>
