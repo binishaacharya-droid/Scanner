@@ -699,29 +699,88 @@ function isValidProductBarcode(code) {
    Calls your backend: server.js
 ===================================================== */
 async function lookupProductOnline(barcode) {
-  try {
-    const res = await fetch(`https://scanner-2kts.onrender.com/lookup/${encodeURIComponent(barcode)}`);
-    const data = await res.json();
+  const savedName = localStorage.getItem("product_" + barcode);
 
+  if (savedName) {
     return {
-      name: data.name || barcode,
-      brand: cleanBrand(data.brand),
-      category: data.category || "",
-      image: data.image || "",
-      barcode: barcode
-    };
-  } catch (error) {
-    console.error(error);
-
-    return {
-      name: barcode,
+      name: savedName,
       brand: "",
-      category: "",
+      category: "Saved Product",
       image: "",
       barcode: barcode
     };
   }
-}
+
+  try {
+    const res = await fetch(`https://scanner-2kts.onrender.com/lookup/${barcode}`);
+    const data = await res.json();
+
+    const productName = data.name || "";
+
+    if (
+      !productName ||
+      productName === barcode ||
+      /^\d+$/.test(productName)
+    ) {
+      const manualName = prompt(
+        "Sorry, product not found.\n\nEnter product name:"
+      );
+
+      if (manualName && manualName.trim()) {
+        localStorage.setItem("product_" + barcode, manualName.trim());
+
+        return {
+          name: manualName.trim(),
+          brand: "",
+          category: "Manual Entry",
+          image: "",
+          barcode: barcode
+        };
+      }
+
+      return {
+        name: "Unknown Product",
+        brand: "",
+        category: "Unknown",
+        image: "",
+        barcode: barcode
+      };
+    }
+
+    return {
+      name: productName,
+      brand: data.brand || "",
+      category: data.category || "",
+      image: data.image || "",
+      barcode: barcode
+    };
+
+  } catch (e) {
+    const manualName = prompt(
+      "Sorry, product lookup failed.\n\nEnter product name:"
+    );
+
+    if (manualName && manualName.trim()) {
+      localStorage.setItem("product_" + barcode, manualName.trim());
+
+      return {
+        name: manualName.trim(),
+        brand: "",
+        category: "Manual Entry",
+        image: "",
+        barcode: barcode
+      };
+    }
+
+    return {
+      name: "Unknown Product",
+      brand: "",
+      category: "Unknown",
+      image: "",
+      barcode: barcode
+    };
+  }
+}}
 
 /* =====================================================
    CAMERA SCANNER
