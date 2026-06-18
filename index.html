@@ -700,7 +700,7 @@ function isValidProductBarcode(code) {
 ===================================================== */
 async function lookupProductOnline(barcode) {
   try {
-    const res = await fetch(`http://localhost:3000/lookup/${encodeURIComponent(barcode)}`);
+    const res = await fetch(`https://scanner-2kts.onrender.com/lookup/${encodeURIComponent(barcode)}`);
     const data = await res.json();
 
     return {
