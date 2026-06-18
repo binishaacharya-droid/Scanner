@@ -731,7 +731,6 @@ async function lookupProductOnline(barcode) {
 
         return {
           name: manualName.trim(),
-          brand: "",
           category: "Manual Entry",
           image: "",
           barcode: barcode
@@ -739,10 +738,7 @@ async function lookupProductOnline(barcode) {
       }
 
       return {
-        name: "Unknown Product",
-        brand: "",
-        category: "Unknown",
-        image: "",
+        name: barcode,
         barcode: barcode
       };
     }
@@ -780,7 +776,7 @@ async function lookupProductOnline(barcode) {
       barcode: barcode
     };
   }
-}}
+}
 
 /* =====================================================
    CAMERA SCANNER
